@@ -181,16 +181,20 @@
 #define arduinoNano        // defines the board as an Arduino nano with with Atmega328P processor
                            // You can define your own board and pinout.
 
-// #define USBcontrol         // USB / serial Command line interface.
+#define USBcontrol         // USB / serial Command line interface.
                            // This allows complete control of all parameters.
 
 #define E2PROM             // Uses the internal EEPROM for parameter storage
 
-#define TM1638Keyboard     // Use a TM1638 for the keyboard
+//#define TM1638Keyboard     // Use a TM1638 for the keyboard
 
-#define TM1638Display      // Use a TM1638 for the display
+//#define TM1638Display      // Use a TM1638 for the display
 
-#define TM1638bargraph     // Use a TM1638 for the Led pressure bargraph
+//#define TM1638bargraph     // Use a TM1638 for the Led pressure bargraph
+
+#define LCDdisplay          // Use lcd display connected to pins: 
+
+#define PUSHBUTTONS         //Use regular push buttons to pins: 
 
 #define ActiveBeeper       // Active beeper can be used on any pin. Passive beeper will require a PWM capable pin
 
@@ -198,7 +202,7 @@
 
 #define BoschBMxSensor     // Bosch Sensortech BMP280 or BME280
 
-#define BoschBMP180Sensor  // Bosch Sensortech BMP180 
+//#define BoschBMP180Sensor  // Bosch Sensortech BMP180 
 
 #define TwoPressureSensors // Double pressure sensor (one for barometric pressure)
 
@@ -251,6 +255,11 @@
 #define dispBargraph  // Alternate physical (LED) bargraphs must also enable this
 #endif
 
+#ifdef LCDdisplay
+#include <LiquidCrystal.h>
+#define dispMenus
+#endif
+
 
 #ifdef  ActiveBeeper
 #define Beeper
@@ -278,6 +287,12 @@
 #define  pin_DIO_TM            4
 #endif
 
+#ifdef LCDdisplay
+const int rs = 8, en = 9, d4 = 4, d5 = 5, d6 = 6, d7 = 7;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+#define dispBufferLength 16
+#endif
+
 #ifdef I2C
 #define pin_SDA               A4
 #define pin_SCL               A5
@@ -292,8 +307,8 @@
 #endif
 
 #ifdef stepDirMotor
-#define pin_Stepper_DIR        6
-#define pin_Stepper_Step       7
+#define pin_Stepper_DIR        11
+#define pin_Stepper_Step       12
 #define StepGen
 #endif
 
@@ -388,6 +403,17 @@
 #define debounce 3  // Keyboard debouncing
 #endif
 
+#ifdef PUSHBUTTONS
+#define maxBtn  8   // should be 8 or 16
+#define btnPrev 7   // position for the 'Prev'  button
+#define btnNext 6   // position for the 'Next'  button
+#define btnDn   5   // position for the 'Down'  button
+#define btnUp   4   // position for the 'Up'    button
+#define btnOk   0   // position for the 'Enter' button
+#define debounce 3  // Keyboard debouncing
+#define isKeyboard
+#endif
+
 #ifdef TM1638Display
 #define dispBufferLength 12
 #endif
@@ -451,7 +477,7 @@ extern bool twi_writeTo_wait;         // Must be set to true to activate the tim
 
 // #define sweep
 
-//#define serialVerbose   // Should the messages sent to the serial port be verbose or not
+#define serialVerbose   // Should the messages sent to the serial port be verbose or not
 
 #define samplePeriod 50  // 50 ms sensor sampling period
 #define highPressureAlarmDetect 10  // delay before an overpressure alarm is triggered (in samplePeriod increments)
@@ -665,7 +691,16 @@ void doDisplay()
  tm.displayText(disp);   
  byte l=strlen(disp)-c+8;                 // Fills the right end of the display
  while (l<8) tm.displayASCII(l++,' ');
-#endif  
+#endif
+
+#ifdef LCDdisplay
+  Serial.println(disp);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("OK to start");
+  lcd.setCursor(0,1);
+  lcd.print(disp);
+#endif
 }
 
 #ifdef isKeyboard
@@ -679,7 +714,40 @@ uint16_t readKeyboard()
 {
 #ifdef TM1638Keyboard
  return tm.readButtons(); // returns a byte with values of button s8s7s6s5s4s3s2s1  
-#endif 
+#endif
+
+#ifdef PUSHBUTTONS
+ uint8_t button = 0;
+ int x;
+ x = analogRead (0);
+ lcd.setCursor(10,1);
+ if (x < 60) {
+   button = 2;
+   //lcd.print ("Right ");
+   //Serial.print ("Right ");
+ }
+ else if (x < 200) {
+   button = 8;
+   //lcd.print ("Up    ");
+   //Serial.print ("Up    ");
+ }
+ else if (x < 400){
+   button = 4;
+   //lcd.print ("Down  ");
+   //Serial.print ("Down  ");
+ }
+ else if (x < 600){
+   button = 1;
+   //lcd.print ("Left  ");
+   //Serial.print ("Left  ");
+ }
+ else if (x < 800){
+   button = 128;
+   //lcd.print ("Select");
+   //Serial.print ("Select");
+ }
+ return button;
+#endif
 }
 
 void debounceKeyboard()
@@ -690,7 +758,14 @@ void debounceKeyboard()
  while (c--)  //Keyboard debounce
   {
    if (m & b)
-     {if (kcnt[c]>debounce) keys[c]=true; else kcnt[c]++;}
+   {
+    if (kcnt[c]>debounce) {
+      keys[c]=true; 
+      //Serial.println((int)b, BIN);
+     }else {
+        kcnt[c]++;
+      }
+     }
     else
      {if (kcnt[c]==0) keys[c]=false; else kcnt[c]--;}
    m+=m; 
@@ -1071,12 +1146,12 @@ void displayMenu()
      dispDelay=50;
     break;
   case 103:
-     sprintf(disp,"TENP %dc",int(temperature)); // character N looks better chan character M
+     sprintf(disp,"TEMP %dc",int(temperature)); // character N looks better chan character M
      dispPhase++;
      dispDelay=80;
     break;
   case 104:
-     sprintf(disp,"Huni%d",int(humidity));    // character N looks better chan character M
+     sprintf(disp,"Humi %d",int(humidity));    // character N looks better chan character M
      dispPhase++;
     break;
   case 105:
@@ -1093,29 +1168,29 @@ void displayMenu()
     break;
       
   case 110:
-     sprintf(disp,(dispTick++ & 1)?"SET   %d":"RATE  %d",int(reqBPM));
+     sprintf(disp,"SET RATE %d",int(reqBPM));
      dispDelay=60;  
     break;
   case 120:
-     sprintf(disp,(dispTick++ & 1)?"SET   %d.%d":"VOLUN. %d.%d",int(reqVolume/1000),int (reqVolume/100) %10); // character N looks better chan character M
+     sprintf(disp,"SET VOL. %d.%d",int(reqVolume/1000),int (reqVolume/100) %10); // character N looks better chan character M
      dispDelay=60;  
     break;
   case 130:
-     sprintf(disp,(dispTick++ & 1)?"SET   %d.%d":"PRESS. %d.%d",int(reqCompression/1000),int (reqCompression/100) %10);
+     sprintf(disp,"SET PRESS. %d.%d",int(reqCompression/1000),int (reqCompression/100) %10);
      dispDelay=60;  
     break;
   case 140:
-     sprintf(disp,(dispTick++ & 1)?"SET   %2d":"SYNC.  %2d",int(syncRatio*100.1)); // 100.1 instead of 100 prevents rounding errors
+     sprintf(disp,"SET SYNC. %2d",int(syncRatio*100.1)); // 100.1 instead of 100 prevents rounding errors
      dispDelay=60;  
     break;
   case 150:
      dispTick++;
-     sprintf(disp,(dispt==2)?"SET   %d.%d":"EXP.  %d.%d",int(expirationRatio),int (expirationRatio*10) %10); 
-     if (dispt==1) sprintf(disp,"Ratio %d.%d",int(expirationRatio),int (expirationRatio*10) %10); 
+     sprintf(disp,"SET EXP. %d.%d",int(expirationRatio),int (expirationRatio*10) %10); 
+     //if (dispt==1) sprintf(disp,"Ratio %d.%d",int(expirationRatio),int (expirationRatio*10) %10); 
      dispDelay=60;  
     break;
   case 160:
-     strcpy(disp,(dispTick++ & 1)?"SETUP  _":"SAVE   _");
+     strcpy(disp,"SAVE SETUP  _");
      dispDelay=60;  
     break;
   default:
@@ -1481,6 +1556,13 @@ void setup() {
 // stepper.setMaxSpeed(3500);
 // stepper.setAcceleration(20000);
 // stepper.moveTo(0);
+
+#ifdef LCDdisplay
+  lcd.begin(16, 2);
+  lcd.clear();
+  lcd.setCursor(0,1);
+  lcd.print("OS Ventilator");
+#endif
 }
 
 
@@ -1497,7 +1579,7 @@ void limitValues(float &B,float &V,float &C,float &D,float &E) // prevent values
 #ifdef isKeyboard
 
 void pressOk()
-{
+{Serial.print("Pressed OK");
  if (menuItem==0)
    {
     active=!active;  // Toggle function when "Enter" key pressed
@@ -1519,12 +1601,14 @@ void pressOk()
 
 void pressPrevNext()
 {
+Serial.print("Pressed LEFT");
  if ((keys[btnPrev]) && (menuItem>0)) {menuItem--;setDisplayMenu(Menu_message+10*menuItem,std_dly,0);}            // Previous menu item (no rollover)
  if ((keys[btnNext]) && (menuItem<MenuItems-1)) {menuItem++;setDisplayMenu(Menu_message+10*menuItem,std_dly,0);}  // Next menu item (no rollover) 
 }
 
 void pressUpDown()
 {
+Serial.print("Pressed DOWN");
  int n=0;
  if (keys[btnDn]) n=-1;
  if (keys[btnUp]) n=1;
@@ -1774,7 +1858,7 @@ void loop() {
 #ifdef dispBargraph   
     updateBargraph();   
 #endif      
-#ifdef isKeyboard      
+#ifdef isKeyboard       
     // Keyboard actions
     if (keys[btnOk]   && !mkeys[btnOk])   pressOk();        // Ok button
     if (keys[btnPrev] && !mkeys[btnPrev]) pressPrevNext();  // previous item button
